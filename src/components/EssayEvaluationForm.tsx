@@ -93,8 +93,6 @@ const EssayEvaluationForm: React.FC = () => {
       thumbnailUrl: thumbnailUrl || "/path/to/default/thumbnail.png",
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
     setIsLoading(false);
   };
 
