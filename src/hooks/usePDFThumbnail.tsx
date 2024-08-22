@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 
 // Set up the worker source
 pdfjs.GlobalWorkerOptions.workerSrc =
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+  "//cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
 
 export const usePDFThumbnail = (file: File | null) => {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
@@ -21,52 +21,23 @@ export const usePDFThumbnail = (file: File | null) => {
     const generateThumbnail = async () => {
       try {
         const fileUrl = URL.createObjectURL(file);
+        const pdf = await pdfjs.getDocument(fileUrl).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 1 });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
 
-        const thumbnail = await new Promise<string>((resolve, reject) => {
-          const canvasElement = document.createElement("canvas");
-          const renderPage = (page: any) => {
-            const viewport = page.getViewport({ scale: 1 });
-            canvasElement.height = viewport.height;
-            canvasElement.width = viewport.width;
-            const context = canvasElement.getContext("2d");
-            const renderContext = {
-              canvasContext: context,
-              viewport: viewport,
-            };
-            page.render(renderContext);
-            resolve(canvasElement.toDataURL());
-          };
+        if (!context) {
+          throw new Error("Unable to create canvas context");
+        }
 
-          const onDocumentLoadSuccess = ({
-            numPages,
-          }: {
-            numPages: number;
-          }) => {
-            if (numPages > 0) {
-              pdfjs.getDocument(fileUrl).promise.then((pdf) => {
-                pdf.getPage(1).then(renderPage);
-              });
-            } else {
-              reject(new Error("No pages in PDF"));
-            }
-          };
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
 
-          const onDocumentLoadFailure = (error: Error) => {
-            reject(error);
-          };
+        await page.render({ canvasContext: context, viewport: viewport })
+          .promise;
 
-          return (
-            <Document
-              file={fileUrl}
-              onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={onDocumentLoadFailure}
-            >
-              <Page pageNumber={1} />
-            </Document>
-          );
-        });
-
-        setThumbnailUrl(thumbnail);
+        setThumbnailUrl(canvas.toDataURL());
         setError(null);
       } catch (err) {
         console.error("Failed to generate PDF thumbnail:", err);
@@ -76,6 +47,12 @@ export const usePDFThumbnail = (file: File | null) => {
     };
 
     generateThumbnail();
+
+    return () => {
+      if (file) {
+        URL.revokeObjectURL(URL.createObjectURL(file));
+      }
+    };
   }, [file]);
 
   return { thumbnailUrl, error };
